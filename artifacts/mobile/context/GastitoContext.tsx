@@ -1,0 +1,204 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+
+export interface Wallet {
+  id: string;
+  name: string;
+  type: "bank" | "cash" | "digital" | "credit" | "savings";
+  balance: number;
+  currency: string;
+  color: string;
+}
+
+export interface Transaction {
+  id: string;
+  amount: number;
+  description: string;
+  category: string;
+  walletId: string;
+  date: string;
+  type: "expense" | "income";
+  merchant?: string;
+  confirmed: boolean;
+}
+
+export interface Debt {
+  id: string;
+  personName: string;
+  amount: number;
+  description: string;
+  direction: "owed_to_me" | "i_owe";
+  date: string;
+  settled: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
+  pendingTransaction?: Partial<Transaction>;
+}
+
+interface GastitoContextValue {
+  wallets: Wallet[];
+  transactions: Transaction[];
+  debts: Debt[];
+  messages: ChatMessage[];
+  addWallet: (w: Omit<Wallet, "id">) => void;
+  updateWallet: (id: string, updates: Partial<Wallet>) => void;
+  addTransaction: (t: Omit<Transaction, "id">) => void;
+  deleteTransaction: (id: string) => void;
+  addDebt: (d: Omit<Debt, "id">) => void;
+  settleDebt: (id: string) => void;
+  addMessage: (m: Omit<ChatMessage, "id" | "timestamp">) => ChatMessage;
+  updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
+  totalBalance: number;
+  monthlyExpenses: number;
+  monthlyIncome: number;
+}
+
+const GastitoContext = createContext<GastitoContextValue | null>(null);
+
+const STORAGE_KEY = "gastito_data_v1";
+
+function generateId(): string {
+  return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+}
+
+const WALLET_COLORS = ["#1A56DB", "#16A34A", "#D97706", "#9333EA", "#DC2626", "#0891B2"];
+
+const DEFAULT_WALLETS: Wallet[] = [
+  { id: "w1", name: "Cuenta Banco", type: "bank", balance: 250000, currency: "CLP", color: "#1A56DB" },
+  { id: "w2", name: "Efectivo", type: "cash", balance: 15000, currency: "CLP", color: "#16A34A" },
+];
+
+const DEFAULT_TRANSACTIONS: Transaction[] = [
+  { id: "t1", amount: 8000, description: "Sushi Osho", category: "Comida", walletId: "w1", date: new Date(Date.now() - 86400000).toISOString(), type: "expense", merchant: "Sushi Osho", confirmed: true },
+  { id: "t2", amount: 12000, description: "Uber al trabajo", category: "Transporte", walletId: "w1", date: new Date(Date.now() - 172800000).toISOString(), type: "expense", merchant: "Uber", confirmed: true },
+  { id: "t3", amount: 890000, description: "Sueldo Enero", category: "Ingresos", walletId: "w1", date: new Date(Date.now() - 259200000).toISOString(), type: "income", confirmed: true },
+  { id: "t4", amount: 3500, description: "Café", category: "Comida", walletId: "w2", date: new Date(Date.now() - 3600000).toISOString(), type: "expense", merchant: "Starbucks", confirmed: true },
+];
+
+const DEFAULT_DEBTS: Debt[] = [
+  { id: "d1", personName: "Sandra", amount: 5000, description: "Almuerzo del martes", direction: "owed_to_me", date: new Date(Date.now() - 86400000).toISOString(), settled: false },
+  { id: "d2", personName: "Matías", amount: 15000, description: "Taxi compartido", direction: "i_owe", date: new Date(Date.now() - 432000000).toISOString(), settled: false },
+];
+
+export function GastitoProvider({ children }: { children: React.ReactNode }) {
+  const [wallets, setWallets] = useState<Wallet[]>(DEFAULT_WALLETS);
+  const [transactions, setTransactions] = useState<Transaction[]>(DEFAULT_TRANSACTIONS);
+  const [debts, setDebts] = useState<Debt[]>(DEFAULT_DEBTS);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      content: "Hola. Soy Gastito, tu asistente financiero.\n\nCuéntame en qué gastaste, cuánto tienes, o qué quieres saber sobre tu plata. Sin formularios.",
+      timestamp: new Date().toISOString(),
+    },
+  ]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
+      if (raw) {
+        try {
+          const data = JSON.parse(raw);
+          if (data.wallets?.length) setWallets(data.wallets);
+          if (data.transactions?.length) setTransactions(data.transactions);
+          if (data.debts?.length) setDebts(data.debts);
+        } catch {}
+      }
+      setLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ wallets, transactions, debts }));
+  }, [wallets, transactions, debts, loaded]);
+
+  const addWallet = useCallback((w: Omit<Wallet, "id">) => {
+    setWallets((prev) => [...prev, { ...w, id: generateId() }]);
+  }, []);
+
+  const updateWallet = useCallback((id: string, updates: Partial<Wallet>) => {
+    setWallets((prev) => prev.map((w) => (w.id === id ? { ...w, ...updates } : w)));
+  }, []);
+
+  const addTransaction = useCallback((t: Omit<Transaction, "id">) => {
+    const tx: Transaction = { ...t, id: generateId() };
+    setTransactions((prev) => [tx, ...prev]);
+    setWallets((prev) =>
+      prev.map((w) => {
+        if (w.id !== t.walletId) return w;
+        const delta = t.type === "income" ? t.amount : -t.amount;
+        return { ...w, balance: w.balance + delta };
+      })
+    );
+  }, []);
+
+  const deleteTransaction = useCallback((id: string) => {
+    setTransactions((prev) => {
+      const tx = prev.find((t) => t.id === id);
+      if (tx) {
+        const delta = tx.type === "income" ? -tx.amount : tx.amount;
+        setWallets((wList) =>
+          wList.map((w) => (w.id === tx.walletId ? { ...w, balance: w.balance + delta } : w))
+        );
+      }
+      return prev.filter((t) => t.id !== id);
+    });
+  }, []);
+
+  const addDebt = useCallback((d: Omit<Debt, "id">) => {
+    setDebts((prev) => [...prev, { ...d, id: generateId() }]);
+  }, []);
+
+  const settleDebt = useCallback((id: string) => {
+    setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, settled: true } : d)));
+  }, []);
+
+  const addMessage = useCallback((m: Omit<ChatMessage, "id" | "timestamp">): ChatMessage => {
+    const msg: ChatMessage = { ...m, id: generateId(), timestamp: new Date().toISOString() };
+    setMessages((prev) => [...prev, msg]);
+    return msg;
+  }, []);
+
+  const updateMessage = useCallback((id: string, updates: Partial<ChatMessage>) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...updates } : m)));
+  }, []);
+
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  const monthlyTransactions = transactions.filter((t) => t.date >= startOfMonth && t.confirmed);
+  const monthlyExpenses = monthlyTransactions.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const monthlyIncome = monthlyTransactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const totalBalance = wallets.reduce((s, w) => s + w.balance, 0);
+
+  return (
+    <GastitoContext.Provider
+      value={{
+        wallets, transactions, debts, messages,
+        addWallet, updateWallet, addTransaction, deleteTransaction,
+        addDebt, settleDebt, addMessage, updateMessage,
+        totalBalance, monthlyExpenses, monthlyIncome,
+      }}
+    >
+      {children}
+    </GastitoContext.Provider>
+  );
+}
+
+export function useGastito() {
+  const ctx = useContext(GastitoContext);
+  if (!ctx) throw new Error("useGastito must be used inside GastitoProvider");
+  return ctx;
+}

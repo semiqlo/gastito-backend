@@ -14,16 +14,24 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { GastitoProvider } from "@/context/GastitoContext";
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerBackTitle: "Back" }}>
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="new-wallet"
+        options={{ presentation: "modal", headerShown: false }}
+      />
+      <Stack.Screen
+        name="new-debt"
+        options={{ presentation: "modal", headerShown: false }}
+      />
     </Stack>
   );
 }
@@ -48,11 +56,13 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView>
-            <KeyboardProvider>
-              <RootLayoutNav />
-            </KeyboardProvider>
-          </GestureHandlerRootView>
+          <GastitoProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <KeyboardProvider>
+                <RootLayoutNav />
+              </KeyboardProvider>
+            </GestureHandlerRootView>
+          </GastitoProvider>
         </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
