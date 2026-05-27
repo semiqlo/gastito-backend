@@ -1,10 +1,16 @@
 import { Router } from "express";
-import OpenAI from "openai";
+import multer from "multer";
+import OpenAI, { toFile } from "openai";
 
 const router = Router();
 
 const openai = new OpenAI({
   apiKey: process.env["OPENAI_API_KEY"],
+});
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
 });
 
 const SYSTEM_PROMPT = `Eres Gastito, un asistente financiero personal chileno. Hablas chileno coloquial directo y estructurado.
@@ -42,6 +48,48 @@ IMPORTANTES:
 - Mantén contexto financiero del usuario cuando te lo proporcionen
 - Las recomendaciones deben ser concretas y basadas en los datos del usuario`;
 
+async function streamChatResponse(
+  res: import("express").Response,
+  userMessage: string,
+  context?: string,
+  history?: Array<{ role: "user" | "assistant"; content: string }>
+) {
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: "system", content: SYSTEM_PROMPT },
+  ];
+
+  if (context) {
+    messages.push({ role: "system", content: context });
+  }
+
+  if (history && Array.isArray(history)) {
+    for (const h of history.slice(-12)) {
+      if (h.role === "user" || h.role === "assistant") {
+        messages.push({ role: h.role, content: h.content });
+      }
+    }
+  }
+
+  messages.push({ role: "user", content: userMessage });
+
+  const stream = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages,
+    max_tokens: 512,
+    stream: true,
+  });
+
+  for await (const chunk of stream) {
+    const content = chunk.choices[0]?.delta?.content;
+    if (content) {
+      res.write(`data: ${JSON.stringify({ content })}\n\n`);
+    }
+    if (chunk.choices[0]?.finish_reason === "stop") {
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    }
+  }
+}
+
 router.post("/chat", async (req, res): Promise<void> => {
   const { message, context, history } = req.body as {
     message: string;
@@ -60,45 +108,74 @@ router.post("/chat", async (req, res): Promise<void> => {
   res.setHeader("X-Accel-Buffering", "no");
 
   try {
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: "system", content: SYSTEM_PROMPT },
-    ];
-
-    if (context) {
-      messages.push({ role: "system", content: context });
-    }
-
-    if (history && Array.isArray(history)) {
-      for (const h of history.slice(-12)) {
-        if (h.role === "user" || h.role === "assistant") {
-          messages.push({ role: h.role, content: h.content });
-        }
-      }
-    }
-
-    messages.push({ role: "user", content: message });
-
-    const stream = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages,
-      max_tokens: 512,
-      stream: true,
-    });
-
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content;
-      if (content) {
-        res.write(`data: ${JSON.stringify({ content })}\n\n`);
-      }
-      if (chunk.choices[0]?.finish_reason === "stop") {
-        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-      }
-    }
-
+    await streamChatResponse(res, message, context, history);
     res.end();
   } catch (err: unknown) {
     req.log.error({ err }, "Gastito chat error");
     res.write(`data: ${JSON.stringify({ error: "Error al procesar tu mensaje." })}\n\n`);
+    res.end();
+  }
+});
+
+router.post("/voice", upload.single("audio"), async (req, res): Promise<void> => {
+  const file = req.file;
+  if (!file) {
+    res.status(400).json({ error: "audio file is required" });
+    return;
+  }
+
+  const { context, history: historyRaw } = req.body as {
+    context?: string;
+    history?: string;
+  };
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+
+  try {
+    const ext = file.mimetype.includes("mp4") || file.mimetype.includes("m4a")
+      ? "m4a"
+      : file.mimetype.includes("webm")
+      ? "webm"
+      : file.mimetype.includes("ogg")
+      ? "ogg"
+      : "wav";
+
+    const audioFile = await toFile(file.buffer, `audio.${ext}`, {
+      type: file.mimetype,
+    });
+
+    const transcription = await openai.audio.transcriptions.create({
+      file: audioFile,
+      model: "gpt-4o-mini-transcribe" as any,
+      language: "es",
+      response_format: "json",
+    } as any);
+
+    const transcript = (transcription as any).text as string;
+
+    if (!transcript || !transcript.trim()) {
+      res.write(`data: ${JSON.stringify({ error: "No se pudo transcribir el audio." })}\n\n`);
+      res.end();
+      return;
+    }
+
+    res.write(`data: ${JSON.stringify({ transcript: transcript.trim() })}\n\n`);
+
+    let history: Array<{ role: "user" | "assistant"; content: string }> = [];
+    if (historyRaw) {
+      try {
+        history = JSON.parse(historyRaw);
+      } catch {}
+    }
+
+    await streamChatResponse(res, transcript.trim(), context, history);
+    res.end();
+  } catch (err: unknown) {
+    req.log.error({ err }, "Gastito voice error");
+    res.write(`data: ${JSON.stringify({ error: "Error al procesar el audio." })}\n\n`);
     res.end();
   }
 });

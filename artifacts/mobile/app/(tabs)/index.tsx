@@ -1,8 +1,11 @@
 import { Feather } from "@expo/vector-icons";
+import { AudioModule, RecordingPresets, useAudioRecorder } from "expo-audio";
 import * as Haptics from "expo-haptics";
 import { fetch } from "expo/fetch";
-import React, { useCallback, useRef, useState } from "react";
+import { File } from "expo-file-system";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Animated,
   ActivityIndicator,
   FlatList,
   Platform,
@@ -54,18 +57,12 @@ function PendingTransactionCard({ tx, onConfirm, onReject }: PendingCard) {
         </View>
       )}
       <View style={styles.pendingActions}>
-        <Pressable
-          onPress={onReject}
-          style={[styles.pendingBtn, { backgroundColor: colors.muted }]}
-        >
+        <Pressable onPress={onReject} style={[styles.pendingBtn, { backgroundColor: colors.muted }]}>
           <Text style={[styles.pendingBtnText, { color: colors.mutedForeground, fontFamily: "Inter_500Medium" }]}>
             No
           </Text>
         </Pressable>
-        <Pressable
-          onPress={onConfirm}
-          style={[styles.pendingBtn, { backgroundColor: colors.primary }]}
-        >
+        <Pressable onPress={onConfirm} style={[styles.pendingBtn, { backgroundColor: colors.primary }]}>
           <Text style={[styles.pendingBtnText, { color: colors.primaryForeground, fontFamily: "Inter_600SemiBold" }]}>
             Confirmar
           </Text>
@@ -92,7 +89,12 @@ function MessageBubble({ message, onConfirmTransaction, onRejectTransaction }: B
           <Text style={[styles.avatarText, { fontFamily: "Inter_700Bold" }]}>G</Text>
         </View>
       )}
-      <View style={styles.bubbleContent}>
+      <View style={[styles.bubbleContent, isUser && styles.bubbleContentUser]}>
+        {message.isVoice && isUser && (
+          <View style={styles.voiceBadge}>
+            <Feather name="mic" size={10} color={colors.primaryForeground} />
+          </View>
+        )}
         <View
           style={[
             styles.bubble,
@@ -104,7 +106,10 @@ function MessageBubble({ message, onConfirmTransaction, onRejectTransaction }: B
           <Text
             style={[
               styles.bubbleText,
-              { color: isUser ? colors.chatBubbleUserText : colors.chatBubbleBotText, fontFamily: "Inter_400Regular" },
+              {
+                color: isUser ? colors.chatBubbleUserText : colors.chatBubbleBotText,
+                fontFamily: "Inter_400Regular",
+              },
             ]}
           >
             {message.content}
@@ -118,50 +123,22 @@ function MessageBubble({ message, onConfirmTransaction, onRejectTransaction }: B
           />
         )}
         <Text style={[styles.timestamp, { color: colors.mutedForeground }]}>
-          {new Date(message.timestamp).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
+          {new Date(message.timestamp).toLocaleTimeString("es-CL", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
         </Text>
       </View>
     </View>
   );
 }
 
-const SYSTEM_PROMPT = `Eres Gastito, un asistente financiero personal chileno. Hablas chileno coloquial directo y estructurado.
+const SYSTEM_CONTEXT_NOTE = `Responde en chileno coloquial conciso. Detecta transacciones con el bloque [TRANSACTION]...[/TRANSACTION] si el mensaje describe un gasto o ingreso.`;
 
-PERSONALIDAD:
-- Tono: amigable + profesional, NO infantil, NO corporativo
-- Sin emojis
-- Sarcasmo leve ocasional para gastos innecesarios (ej: "AliExpress otra vez.")
-- Respuestas concisas y estructuradas
-
-CAPACIDADES:
-- Detectar gastos e ingresos en lenguaje natural chileno
-- Entender montos: "8 lucas" = $8.000, "12 mil" = $12.000, "medio palo" = $500.000
-- Sugerir categorías automáticamente
-- Rastrear deudas entre amigos
-- Dar recomendaciones financieras
-- Responder preguntas sobre presupuesto
-
-CUANDO DETECTES UNA TRANSACCION, responde con este formato EXACTO:
-[TRANSACTION]
-amount: <numero sin puntos ni signo>
-category: <categoria en español>
-type: <expense o income>
-description: <descripcion breve>
-merchant: <nombre comercio o vacío>
-[/TRANSACTION]
-<tu mensaje conversacional>
-
-Categorías válidas: Comida, Transporte, Entretenimiento, Compras, Salud, Educación, Servicios, Ingresos, Deudas, Otro
-
-EJEMPLOS:
-- "Gasté 8 lucas en sushi" → detectar expense $8.000 Comida
-- "Uber 12 mil" → detectar expense $12.000 Transporte  
-- "Me llegó el sueldo 890 lucas" → detectar income $890.000 Ingresos
-- "¿Cuánto puedo gastar?" → respuesta conversacional de análisis
-
-Si no hay transacción, responde conversacionalmente en chileno.`;
-
-function parseTransactionFromResponse(text: string): { cleanText: string; transaction: Partial<Transaction> | null } {
+function parseTransactionFromResponse(text: string): {
+  cleanText: string;
+  transaction: Partial<Transaction> | null;
+} {
   const match = text.match(/\[TRANSACTION\]([\s\S]*?)\[\/TRANSACTION\]/);
   if (!match) return { cleanText: text, transaction: null };
 
@@ -186,47 +163,84 @@ function parseTransactionFromResponse(text: string): { cleanText: string; transa
   };
 
   const cleanText = text.replace(/\[TRANSACTION\][\s\S]*?\[\/TRANSACTION\]\n?/, "").trim();
-  return { cleanText, transaction: transaction.amount && transaction.amount > 0 ? transaction : null };
+  return {
+    cleanText,
+    transaction: transaction.amount && transaction.amount > 0 ? transaction : null,
+  };
+}
+
+function RecordingIndicator() {
+  const colors = useColors();
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.35, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulse]);
+
+  return (
+    <View style={styles.recordingRow}>
+      <Animated.View
+        style={[
+          styles.recordingDot,
+          { backgroundColor: colors.destructive, transform: [{ scale: pulse }] },
+        ]}
+      />
+      <Text style={[styles.recordingText, { color: colors.mutedForeground, fontFamily: "Inter_500Medium" }]}>
+        Grabando...
+      </Text>
+    </View>
+  );
 }
 
 export default function ChatScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { messages, addMessage, updateMessage, addTransaction, wallets, totalBalance, monthlyExpenses } = useGastito();
+  const {
+    messages,
+    addMessage,
+    updateMessage,
+    addTransaction,
+    wallets,
+    totalBalance,
+    monthlyExpenses,
+  } = useGastito();
+
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied">("unknown");
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const flatListRef = useRef<FlatList>(null);
 
   const buildContext = useCallback(() => {
     const balance = `$${totalBalance.toLocaleString("es-CL")}`;
     const expenses = `$${monthlyExpenses.toLocaleString("es-CL")}`;
-    return `Contexto del usuario: Balance total: ${balance}, Gastos este mes: ${expenses}, Cuentas: ${wallets.map((w) => `${w.name} (${w.type}): $${w.balance.toLocaleString("es-CL")}`).join(", ")}`;
+    return `Contexto del usuario: Balance total: ${balance}, Gastos este mes: ${expenses}, Cuentas: ${wallets
+      .map((w) => `${w.name} (${w.type}): $${w.balance.toLocaleString("es-CL")}`)
+      .join(", ")}`;
   }, [totalBalance, monthlyExpenses, wallets]);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
-    if (!text || isLoading) return;
-
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setInput("");
-    setIsLoading(true);
-
-    addMessage({ role: "user", content: text });
-
-    const botMsg = addMessage({ role: "assistant", content: "" });
-    const botId = botMsg.id;
-
-    try {
+  const streamResponse = useCallback(
+    async (userText: string, botId: string, extraHistory?: Array<{ role: "user" | "assistant"; content: string }>) => {
       const domain = process.env.EXPO_PUBLIC_DOMAIN;
       const baseUrl = domain ? `https://${domain}` : "";
+
+      const history = extraHistory ?? messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
 
       const response = await fetch(`${baseUrl}/api/gastito/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: text,
+          message: userText,
           context: buildContext(),
-          history: messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+          history,
         }),
       });
 
@@ -243,37 +257,174 @@ export default function ChatScreen() {
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.content) {
-                fullText += data.content;
-                const { cleanText } = parseTransactionFromResponse(fullText);
+        for (const line of chunk.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.content) {
+              fullText += data.content;
+              const { cleanText } = parseTransactionFromResponse(fullText);
+              updateMessage(botId, { content: cleanText || fullText });
+            }
+            if (data.done) {
+              const { cleanText, transaction } = parseTransactionFromResponse(fullText);
+              if (transaction) {
+                updateMessage(botId, { content: cleanText, pendingTransaction: transaction });
+              } else {
                 updateMessage(botId, { content: cleanText || fullText });
               }
-              if (data.done) {
-                const { cleanText, transaction } = parseTransactionFromResponse(fullText);
-                if (transaction) {
-                  updateMessage(botId, { content: cleanText, pendingTransaction: transaction });
-                } else {
-                  updateMessage(botId, { content: cleanText || fullText });
-                }
-              }
-            } catch {}
-          }
+            }
+          } catch {}
         }
       }
-    } catch (err) {
-      updateMessage(botId, {
-        content: "Hubo un problema al conectar. Intenta de nuevo.",
-      });
+    },
+    [messages, buildContext, updateMessage]
+  );
+
+  const handleSend = useCallback(async () => {
+    const text = input.trim();
+    if (!text || isLoading) return;
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setInput("");
+    setIsLoading(true);
+
+    addMessage({ role: "user", content: text });
+    const botMsg = addMessage({ role: "assistant", content: "" });
+
+    try {
+      await streamResponse(text, botMsg.id);
+    } catch {
+      updateMessage(botMsg.id, { content: "Hubo un problema al conectar. Intenta de nuevo." });
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, messages, addMessage, updateMessage, buildContext]);
+  }, [input, isLoading, addMessage, updateMessage, streamResponse]);
+
+  const requestMicPermission = useCallback(async (): Promise<boolean> => {
+    if (Platform.OS === "web") return false;
+    try {
+      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
+      setMicPermission(granted ? "granted" : "denied");
+      return granted;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    if (isLoading || isRecording) return;
+
+    let hasPermission = micPermission === "granted";
+    if (!hasPermission) {
+      hasPermission = await requestMicPermission();
+      if (!hasPermission) return;
+    }
+
+    try {
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setIsRecording(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (err) {
+      console.warn("Recording failed", err);
+    }
+  }, [isLoading, isRecording, micPermission, requestMicPermission, recorder]);
+
+  const stopRecordingAndSend = useCallback(async () => {
+    if (!isRecording) return;
+
+    setIsRecording(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    try {
+      await recorder.stop();
+      const uri = recorder.uri;
+
+      if (!uri) return;
+
+      setIsLoading(true);
+
+      const domain = process.env.EXPO_PUBLIC_DOMAIN;
+      const baseUrl = domain ? `https://${domain}` : "";
+
+      const formData = new FormData();
+
+      if (Platform.OS === "web") {
+        const blob = await (await globalThis.fetch(uri)).blob();
+        formData.append("audio", blob, "audio.webm");
+      } else {
+        const file = new File(uri);
+        formData.append("audio", file as any);
+      }
+
+      formData.append("context", buildContext());
+      formData.append(
+        "history",
+        JSON.stringify(messages.slice(-10).map((m) => ({ role: m.role, content: m.content })))
+      );
+
+      const botMsg = addMessage({ role: "assistant", content: "" });
+      const botId = botMsg.id;
+
+      const response = await fetch(`${baseUrl}/api/gastito/voice`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error("Server error");
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No stream");
+
+      const decoder = new TextDecoder();
+      let fullText = "";
+      let userMsgAdded = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        for (const line of chunk.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.transcript) {
+              if (!userMsgAdded) {
+                addMessage({ role: "user", content: data.transcript, isVoice: true });
+                userMsgAdded = true;
+              }
+            }
+
+            if (data.content) {
+              fullText += data.content;
+              const { cleanText } = parseTransactionFromResponse(fullText);
+              updateMessage(botId, { content: cleanText || fullText });
+            }
+
+            if (data.done) {
+              const { cleanText, transaction } = parseTransactionFromResponse(fullText);
+              if (transaction) {
+                updateMessage(botId, { content: cleanText, pendingTransaction: transaction });
+              } else {
+                updateMessage(botId, { content: cleanText || fullText });
+              }
+            }
+
+            if (data.error) {
+              updateMessage(botId, { content: data.error });
+            }
+          } catch {}
+        }
+      }
+    } catch {
+      addMessage({ role: "assistant", content: "No pude procesar el audio. Intenta de nuevo." });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isRecording, recorder, messages, buildContext, addMessage, updateMessage]);
 
   const handleConfirmTransaction = useCallback(
     (msgId: string, tx: Partial<Transaction>) => {
@@ -296,7 +447,10 @@ export default function ChatScreen() {
   const handleRejectTransaction = useCallback(
     (msgId: string) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      updateMessage(msgId, { pendingTransaction: undefined, content: "Entendido, no registro nada." });
+      updateMessage(msgId, {
+        pendingTransaction: undefined,
+        content: "Entendido, no registro nada.",
+      });
     },
     [updateMessage]
   );
@@ -323,18 +477,25 @@ export default function ChatScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: topPad, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: topPad,
+            backgroundColor: colors.card,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
         <View style={[styles.headerDot, { backgroundColor: colors.positive }]} />
-        <Text style={[styles.headerTitle, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
+        <Text
+          style={[styles.headerTitle, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}
+        >
           Gastito
         </Text>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior="padding"
-        keyboardVerticalOffset={0}
-      >
+      <KeyboardAvoidingView style={styles.flex} behavior="padding" keyboardVerticalOffset={0}>
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -346,65 +507,112 @@ export default function ChatScreen() {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
 
-        {isLoading && (
+        {isLoading && !isRecording && (
           <View style={[styles.typingRow, { paddingHorizontal: 16 }]}>
             <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
               <Text style={[styles.avatarText, { fontFamily: "Inter_700Bold" }]}>G</Text>
             </View>
-            <View style={[styles.typingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View
+              style={[
+                styles.typingBubble,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
               <ActivityIndicator size="small" color={colors.primary} />
             </View>
           </View>
         )}
 
-        <View
-          style={[
-            styles.inputBar,
-            {
-              backgroundColor: colors.card,
-              borderTopColor: colors.border,
-              paddingBottom: bottomPad + 8,
-            },
-          ]}
-        >
-          <TextInput
+        {isRecording && (
+          <View style={[styles.recordingBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+            <RecordingIndicator />
+            <Text style={[styles.recordingHint, { color: colors.mutedForeground }]}>
+              Suelta para enviar
+            </Text>
+          </View>
+        )}
+
+        {!isRecording && (
+          <View
             style={[
-              styles.input,
+              styles.inputBar,
               {
-                backgroundColor: colors.muted,
-                color: colors.foreground,
-                borderColor: colors.border,
-                fontFamily: "Inter_400Regular",
-              },
-            ]}
-            value={input}
-            onChangeText={setInput}
-            placeholder="Gasté 8 lucas en sushi..."
-            placeholderTextColor={colors.mutedForeground}
-            multiline
-            maxLength={500}
-            returnKeyType="send"
-            onSubmitEditing={handleSend}
-            blurOnSubmit={false}
-          />
-          <Pressable
-            onPress={handleSend}
-            disabled={!input.trim() || isLoading}
-            style={[
-              styles.sendBtn,
-              {
-                backgroundColor:
-                  input.trim() && !isLoading ? colors.primary : colors.muted,
+                backgroundColor: colors.card,
+                borderTopColor: colors.border,
+                paddingBottom: bottomPad + 8,
               },
             ]}
           >
-            <Feather
-              name="arrow-up"
-              size={20}
-              color={input.trim() && !isLoading ? colors.primaryForeground : colors.mutedForeground}
+            {Platform.OS !== "web" && (
+              <Pressable
+                onPressIn={startRecording}
+                onPressOut={stopRecordingAndSend}
+                disabled={isLoading}
+                style={[
+                  styles.micBtn,
+                  {
+                    backgroundColor:
+                      micPermission === "denied" ? colors.muted : colors.secondary,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Feather
+                  name="mic"
+                  size={19}
+                  color={
+                    micPermission === "denied"
+                      ? colors.mutedForeground
+                      : colors.primary
+                  }
+                />
+              </Pressable>
+            )}
+
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.muted,
+                  color: colors.foreground,
+                  borderColor: colors.border,
+                  fontFamily: "Inter_400Regular",
+                },
+              ]}
+              value={input}
+              onChangeText={setInput}
+              placeholder="Gasté 8 lucas en sushi..."
+              placeholderTextColor={colors.mutedForeground}
+              multiline
+              maxLength={500}
+              returnKeyType="send"
+              onSubmitEditing={handleSend}
+              blurOnSubmit={false}
             />
-          </Pressable>
-        </View>
+
+            <Pressable
+              onPress={handleSend}
+              disabled={!input.trim() || isLoading}
+              style={[
+                styles.sendBtn,
+                {
+                  backgroundColor:
+                    input.trim() && !isLoading ? colors.primary : colors.muted,
+                },
+              ]}
+            >
+              <Feather
+                name="arrow-up"
+                size={20}
+                color={
+                  input.trim() && !isLoading
+                    ? colors.primaryForeground
+                    : colors.mutedForeground
+                }
+              />
+            </Pressable>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </View>
   );
@@ -428,6 +636,17 @@ const styles = StyleSheet.create({
   bubbleRowUser: { justifyContent: "flex-end" },
   bubbleRowBot: { justifyContent: "flex-start" },
   bubbleContent: { flex: 1, gap: 6 },
+  bubbleContentUser: { alignItems: "flex-end" },
+  voiceBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "rgba(26,86,219,0.7)",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "flex-end",
+    marginBottom: -4,
+  },
   avatar: {
     width: 30,
     height: 30,
@@ -437,12 +656,22 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   avatarText: { color: "#fff", fontSize: 13 },
-  bubble: { borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, maxWidth: "85%" },
-  bubbleUser: { alignSelf: "flex-end", borderBottomRightRadius: 4 },
+  bubble: {
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxWidth: "85%",
+  },
+  bubbleUser: { borderBottomRightRadius: 4 },
   bubbleBot: { alignSelf: "flex-start", borderBottomLeftRadius: 4, borderWidth: 1 },
   bubbleText: { fontSize: 15, lineHeight: 22 },
   timestamp: { fontSize: 11, paddingHorizontal: 4 },
-  typingRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  typingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
   typingBubble: {
     borderRadius: 16,
     paddingHorizontal: 16,
@@ -456,6 +685,14 @@ const styles = StyleSheet.create({
     gap: 8,
     borderTopWidth: 1,
     alignItems: "flex-end",
+  },
+  micBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
   },
   input: {
     flex: 1,
@@ -492,4 +729,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   pendingBtnText: { fontSize: 14 },
+  recordingBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+  },
+  recordingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  recordingDot: { width: 10, height: 10, borderRadius: 5 },
+  recordingText: { fontSize: 14 },
+  recordingHint: { fontSize: 13 },
 });
