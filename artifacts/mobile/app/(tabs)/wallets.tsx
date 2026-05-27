@@ -28,11 +28,11 @@ const WALLET_TYPE_LABELS: Record<Wallet["type"], string> = {
 };
 
 const WALLET_TYPE_ICONS: Record<Wallet["type"], string> = {
-  bank: "landmark",
+  bank: "home",
   cash: "dollar-sign",
   digital: "smartphone",
   credit: "credit-card",
-  savings: "piggy-bank",
+  savings: "archive",
 };
 
 interface WalletCardProps {
