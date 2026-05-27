@@ -210,6 +210,7 @@ export default function ChatScreen() {
     wallets,
     totalBalance,
     monthlyExpenses,
+    budgetStatus,
   } = useGastito();
 
   const [input, setInput] = useState("");
@@ -440,8 +441,26 @@ export default function ChatScreen() {
         confirmed: true,
       });
       updateMessage(msgId, { pendingTransaction: undefined });
+
+      if (tx.type === "expense" && tx.category && tx.amount) {
+        const budget = budgetStatus.find((b) => b.category === tx.category);
+        if (budget) {
+          const newSpent = budget.spent + tx.amount;
+          const newPct = (newSpent / budget.limit) * 100;
+          let warning: string | null = null;
+          if (newPct >= 100) {
+            warning = `Excediste el presupuesto de ${tx.category} este mes. Llevabas $${budget.limit.toLocaleString("es-CL")} de limite y ahora vas en $${newSpent.toLocaleString("es-CL")}.`;
+          } else if (newPct >= 80) {
+            const remaining = budget.limit - newSpent;
+            warning = `Llevas el ${newPct.toFixed(0)}% del presupuesto de ${tx.category}. Te quedan $${remaining.toLocaleString("es-CL")} para el resto del mes.`;
+          }
+          if (warning) {
+            setTimeout(() => addMessage({ role: "assistant", content: warning! }), 400);
+          }
+        }
+      }
     },
-    [addTransaction, updateMessage]
+    [addTransaction, updateMessage, budgetStatus, addMessage]
   );
 
   const handleRejectTransaction = useCallback(

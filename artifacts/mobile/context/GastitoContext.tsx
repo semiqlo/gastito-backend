@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -47,11 +48,36 @@ export interface ChatMessage {
   pendingTransaction?: Partial<Transaction>;
 }
 
+export interface Budget {
+  category: string;
+  limit: number;
+}
+
+export interface BudgetStatus {
+  category: string;
+  limit: number;
+  spent: number;
+  percentage: number;
+  status: "ok" | "warning" | "over";
+}
+
+export const EXPENSE_CATEGORIES = [
+  "Comida",
+  "Transporte",
+  "Entretenimiento",
+  "Compras",
+  "Salud",
+  "Educacion",
+  "Servicios",
+  "Otro",
+] as const;
+
 interface GastitoContextValue {
   wallets: Wallet[];
   transactions: Transaction[];
   debts: Debt[];
   messages: ChatMessage[];
+  budgets: Budget[];
   addWallet: (w: Omit<Wallet, "id">) => void;
   updateWallet: (id: string, updates: Partial<Wallet>) => void;
   addTransaction: (t: Omit<Transaction, "id">) => void;
@@ -60,20 +86,21 @@ interface GastitoContextValue {
   settleDebt: (id: string) => void;
   addMessage: (m: Omit<ChatMessage, "id" | "timestamp">) => ChatMessage;
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
+  setBudget: (category: string, limit: number) => void;
+  deleteBudget: (category: string) => void;
   totalBalance: number;
   monthlyExpenses: number;
   monthlyIncome: number;
+  budgetStatus: BudgetStatus[];
 }
 
 const GastitoContext = createContext<GastitoContextValue | null>(null);
 
-const STORAGE_KEY = "gastito_data_v1";
+const STORAGE_KEY = "gastito_data_v2";
 
 function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
 }
-
-const WALLET_COLORS = ["#1A56DB", "#16A34A", "#D97706", "#9333EA", "#DC2626", "#0891B2"];
 
 const DEFAULT_WALLETS: Wallet[] = [
   { id: "w1", name: "Cuenta Banco", type: "bank", balance: 250000, currency: "CLP", color: "#1A56DB" },
@@ -92,10 +119,16 @@ const DEFAULT_DEBTS: Debt[] = [
   { id: "d2", personName: "Matías", amount: 15000, description: "Taxi compartido", direction: "i_owe", date: new Date(Date.now() - 432000000).toISOString(), settled: false },
 ];
 
+const DEFAULT_BUDGETS: Budget[] = [
+  { category: "Comida", limit: 80000 },
+  { category: "Transporte", limit: 40000 },
+];
+
 export function GastitoProvider({ children }: { children: React.ReactNode }) {
   const [wallets, setWallets] = useState<Wallet[]>(DEFAULT_WALLETS);
   const [transactions, setTransactions] = useState<Transaction[]>(DEFAULT_TRANSACTIONS);
   const [debts, setDebts] = useState<Debt[]>(DEFAULT_DEBTS);
+  const [budgets, setBudgets] = useState<Budget[]>(DEFAULT_BUDGETS);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -114,6 +147,7 @@ export function GastitoProvider({ children }: { children: React.ReactNode }) {
           if (data.wallets?.length) setWallets(data.wallets);
           if (data.transactions?.length) setTransactions(data.transactions);
           if (data.debts?.length) setDebts(data.debts);
+          if (data.budgets?.length) setBudgets(data.budgets);
         } catch {}
       }
       setLoaded(true);
@@ -122,8 +156,8 @@ export function GastitoProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loaded) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ wallets, transactions, debts }));
-  }, [wallets, transactions, debts, loaded]);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ wallets, transactions, debts, budgets }));
+  }, [wallets, transactions, debts, budgets, loaded]);
 
   const addWallet = useCallback((w: Omit<Wallet, "id">) => {
     setWallets((prev) => [...prev, { ...w, id: generateId() }]);
@@ -176,6 +210,20 @@ export function GastitoProvider({ children }: { children: React.ReactNode }) {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...updates } : m)));
   }, []);
 
+  const setBudget = useCallback((category: string, limit: number) => {
+    setBudgets((prev) => {
+      const existing = prev.find((b) => b.category === category);
+      if (existing) {
+        return prev.map((b) => (b.category === category ? { ...b, limit } : b));
+      }
+      return [...prev, { category, limit }];
+    });
+  }, []);
+
+  const deleteBudget = useCallback((category: string) => {
+    setBudgets((prev) => prev.filter((b) => b.category !== category));
+  }, []);
+
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
@@ -184,13 +232,31 @@ export function GastitoProvider({ children }: { children: React.ReactNode }) {
   const monthlyIncome = monthlyTransactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const totalBalance = wallets.reduce((s, w) => s + w.balance, 0);
 
+  const budgetStatus = useMemo((): BudgetStatus[] => {
+    const spentByCategory: Record<string, number> = {};
+    for (const t of monthlyTransactions) {
+      if (t.type === "expense") {
+        spentByCategory[t.category] = (spentByCategory[t.category] ?? 0) + t.amount;
+      }
+    }
+    return budgets.map((b) => {
+      const spent = spentByCategory[b.category] ?? 0;
+      const percentage = b.limit > 0 ? (spent / b.limit) * 100 : 0;
+      const status: BudgetStatus["status"] =
+        percentage >= 100 ? "over" : percentage >= 80 ? "warning" : "ok";
+      return { category: b.category, limit: b.limit, spent, percentage, status };
+    });
+  }, [budgets, monthlyTransactions]);
+
   return (
     <GastitoContext.Provider
       value={{
-        wallets, transactions, debts, messages,
+        wallets, transactions, debts, messages, budgets,
         addWallet, updateWallet, addTransaction, deleteTransaction,
         addDebt, settleDebt, addMessage, updateMessage,
+        setBudget, deleteBudget,
         totalBalance, monthlyExpenses, monthlyIncome,
+        budgetStatus,
       }}
     >
       {children}

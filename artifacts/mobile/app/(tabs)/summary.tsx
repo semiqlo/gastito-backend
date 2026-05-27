@@ -1,6 +1,8 @@
 import { Feather } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
 import React from "react";
-import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useGastito } from "@/context/GastitoContext";
@@ -10,23 +12,42 @@ function formatCLP(amount: number): string {
   return `$${amount.toLocaleString("es-CL")}`;
 }
 
-function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
+function ProgressBar({
+  value,
+  max,
+  color,
+  bgColor,
+}: {
+  value: number;
+  max: number;
+  color: string;
+  bgColor: string;
+}) {
   const pct = max > 0 ? Math.min(value / max, 1) : 0;
   return (
-    <View style={pbStyles.track}>
+    <View style={[pbStyles.track, { backgroundColor: bgColor }]}>
       <View style={[pbStyles.fill, { width: `${pct * 100}%` as any, backgroundColor: color }]} />
     </View>
   );
 }
 const pbStyles = StyleSheet.create({
-  track: { height: 6, backgroundColor: "#E8EDF5", borderRadius: 3, overflow: "hidden" },
+  track: { height: 6, borderRadius: 3, overflow: "hidden" },
   fill: { height: 6, borderRadius: 3 },
 });
 
 export default function SummaryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { transactions, wallets, totalBalance, monthlyExpenses, monthlyIncome, debts } = useGastito();
+  const router = useRouter();
+  const {
+    transactions,
+    wallets,
+    totalBalance,
+    monthlyExpenses,
+    monthlyIncome,
+    debts,
+    budgetStatus,
+  } = useGastito();
 
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
   const bottomPad = insets.bottom + (Platform.OS === "web" ? 34 : 0);
@@ -50,22 +71,45 @@ export default function SummaryScreen() {
     totalActive.filter((d) => d.direction === "owed_to_me").reduce((s, d) => s + d.amount, 0) -
     totalActive.filter((d) => d.direction === "i_owe").reduce((s, d) => s + d.amount, 0);
 
-  const savingsRate = monthlyIncome > 0
-    ? Math.max(0, ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100)
-    : 0;
+  const savingsRate =
+    monthlyIncome > 0
+      ? Math.max(0, ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100)
+      : 0;
 
   const savingsColor =
     savingsRate >= 20 ? colors.positive : savingsRate >= 10 ? colors.warning : colors.negative;
 
+  const budgetStatusColor = (status: "ok" | "warning" | "over") => {
+    if (status === "over") return colors.negative;
+    if (status === "warning") return colors.warning;
+    return colors.positive;
+  };
+
+  const overBudgetCount = budgetStatus.filter((b) => b.status === "over").length;
+  const warningCount = budgetStatus.filter((b) => b.status === "warning").length;
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: topPad, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerTitle, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
-          Resumen
-        </Text>
-        <Text style={[styles.headerSub, { color: colors.mutedForeground }]}>
-          {monthName.charAt(0).toUpperCase() + monthName.slice(1)}
-        </Text>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: topPad,
+            backgroundColor: colors.card,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
+        <View>
+          <Text
+            style={[styles.headerTitle, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}
+          >
+            Resumen
+          </Text>
+          <Text style={[styles.headerSub, { color: colors.mutedForeground }]}>
+            {monthName.charAt(0).toUpperCase() + monthName.slice(1)}
+          </Text>
+        </View>
       </View>
 
       <ScrollView
@@ -74,21 +118,30 @@ export default function SummaryScreen() {
       >
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.mutedForeground }]}>Balance total</Text>
-          <Text style={[styles.bigNumber, { color: colors.foreground, fontFamily: "Inter_700Bold" }]}>
+          <Text
+            style={[styles.bigNumber, { color: colors.foreground, fontFamily: "Inter_700Bold" }]}
+          >
             {formatCLP(totalBalance)}
           </Text>
           <View style={styles.miniRow}>
             <View style={styles.miniItem}>
               <View style={[styles.miniDot, { backgroundColor: colors.positive }]} />
               <Text style={[styles.miniLabel, { color: colors.mutedForeground }]}>Ingresos: </Text>
-              <Text style={[styles.miniVal, { color: colors.positive, fontFamily: "Inter_600SemiBold" }]}>
+              <Text
+                style={[styles.miniVal, { color: colors.positive, fontFamily: "Inter_600SemiBold" }]}
+              >
                 +{formatCLP(monthlyIncome)}
               </Text>
             </View>
             <View style={styles.miniItem}>
               <View style={[styles.miniDot, { backgroundColor: colors.negative }]} />
               <Text style={[styles.miniLabel, { color: colors.mutedForeground }]}>Gastos: </Text>
-              <Text style={[styles.miniVal, { color: colors.negative, fontFamily: "Inter_600SemiBold" }]}>
+              <Text
+                style={[
+                  styles.miniVal,
+                  { color: colors.negative, fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
                 -{formatCLP(monthlyExpenses)}
               </Text>
             </View>
@@ -98,11 +151,18 @@ export default function SummaryScreen() {
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.cardHeader}>
             <Text style={[styles.cardTitle, { color: colors.mutedForeground }]}>Tasa de ahorro</Text>
-            <Text style={[styles.pctBadge, { color: savingsColor, fontFamily: "Inter_700Bold" }]}>
+            <Text
+              style={[styles.pctBadge, { color: savingsColor, fontFamily: "Inter_700Bold" }]}
+            >
               {savingsRate.toFixed(1)}%
             </Text>
           </View>
-          <ProgressBar value={monthlyIncome - monthlyExpenses} max={monthlyIncome} color={savingsColor} />
+          <ProgressBar
+            value={monthlyIncome - monthlyExpenses}
+            max={monthlyIncome}
+            color={savingsColor}
+            bgColor={colors.muted}
+          />
           <Text style={[styles.cardHint, { color: colors.mutedForeground }]}>
             {savingsRate >= 20
               ? "Buen ritmo de ahorro."
@@ -112,17 +172,138 @@ export default function SummaryScreen() {
           </Text>
         </View>
 
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <Text style={[styles.cardTitle, { color: colors.mutedForeground }]}>
+                Presupuestos
+              </Text>
+              {(overBudgetCount > 0 || warningCount > 0) && (
+                <View
+                  style={[
+                    styles.alertBadge,
+                    {
+                      backgroundColor:
+                        overBudgetCount > 0 ? colors.negative + "20" : colors.warning + "20",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.alertBadgeText,
+                      {
+                        color: overBudgetCount > 0 ? colors.negative : colors.warning,
+                        fontFamily: "Inter_600SemiBold",
+                      },
+                    ]}
+                  >
+                    {overBudgetCount > 0
+                      ? `${overBudgetCount} excedido${overBudgetCount > 1 ? "s" : ""}`
+                      : `${warningCount} en limite`}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/budget-modal" as any);
+              }}
+              style={[styles.editBtn, { backgroundColor: colors.muted }]}
+            >
+              <Feather name="sliders" size={13} color={colors.primary} />
+              <Text
+                style={[
+                  styles.editBtnText,
+                  { color: colors.primary, fontFamily: "Inter_500Medium" },
+                ]}
+              >
+                Editar
+              </Text>
+            </Pressable>
+          </View>
+
+          {budgetStatus.length === 0 ? (
+            <Pressable
+              onPress={() => router.push("/budget-modal" as any)}
+              style={[styles.emptyBudget, { borderColor: colors.border }]}
+            >
+              <Feather name="plus-circle" size={16} color={colors.mutedForeground} />
+              <Text style={[styles.emptyBudgetText, { color: colors.mutedForeground }]}>
+                Toca para definir tus limites mensuales
+              </Text>
+            </Pressable>
+          ) : (
+            budgetStatus.map((b) => {
+              const barColor = budgetStatusColor(b.status);
+              return (
+                <View key={b.category} style={styles.budgetRow}>
+                  <View style={styles.budgetRowTop}>
+                    <Text
+                      style={[
+                        styles.budgetCat,
+                        { color: colors.foreground, fontFamily: "Inter_500Medium" },
+                      ]}
+                    >
+                      {b.category}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.budgetPct,
+                        { color: barColor, fontFamily: "Inter_600SemiBold" },
+                      ]}
+                    >
+                      {b.percentage.toFixed(0)}%
+                    </Text>
+                  </View>
+                  <ProgressBar
+                    value={b.spent}
+                    max={b.limit}
+                    color={barColor}
+                    bgColor={colors.muted}
+                  />
+                  <View style={styles.budgetRowBottom}>
+                    <Text style={[styles.budgetSpent, { color: colors.mutedForeground }]}>
+                      {formatCLP(b.spent)} gastado
+                    </Text>
+                    <Text style={[styles.budgetLimit, { color: colors.mutedForeground }]}>
+                      limite {formatCLP(b.limit)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
+
         {sortedCategories.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.cardTitle, { color: colors.mutedForeground }]}>Gastos por categoria</Text>
+            <Text style={[styles.cardTitle, { color: colors.mutedForeground }]}>
+              Gastos por categoria
+            </Text>
             {sortedCategories.slice(0, 5).map(([cat, total]) => (
               <View key={cat} style={styles.catRow}>
-                <Text style={[styles.catName, { color: colors.foreground, fontFamily: "Inter_500Medium" }]}>
+                <Text
+                  style={[
+                    styles.catName,
+                    { color: colors.foreground, fontFamily: "Inter_500Medium" },
+                  ]}
+                >
                   {cat}
                 </Text>
                 <View style={styles.catRight}>
-                  <ProgressBar value={total} max={monthlyExpenses} color={colors.primary} />
-                  <Text style={[styles.catAmount, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
+                  <ProgressBar
+                    value={total}
+                    max={monthlyExpenses}
+                    color={colors.primary}
+                    bgColor={colors.muted}
+                  />
+                  <Text
+                    style={[
+                      styles.catAmount,
+                      { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+                    ]}
+                  >
                     {formatCLP(total)}
                   </Text>
                 </View>
@@ -136,10 +317,14 @@ export default function SummaryScreen() {
           <Text
             style={[
               styles.bigNumber,
-              { color: netDebt >= 0 ? colors.positive : colors.negative, fontFamily: "Inter_700Bold" },
+              {
+                color: netDebt >= 0 ? colors.positive : colors.negative,
+                fontFamily: "Inter_700Bold",
+              },
             ]}
           >
-            {netDebt >= 0 ? "+" : ""}{formatCLP(Math.abs(netDebt))}
+            {netDebt >= 0 ? "+" : ""}
+            {formatCLP(Math.abs(netDebt))}
           </Text>
           <Text style={[styles.cardHint, { color: colors.mutedForeground }]}>
             {netDebt > 0
@@ -155,10 +340,23 @@ export default function SummaryScreen() {
           {wallets.map((w) => (
             <View key={w.id} style={styles.walletRow}>
               <View style={[styles.walletDot, { backgroundColor: w.color }]} />
-              <Text style={[styles.walletName, { color: colors.foreground, fontFamily: "Inter_500Medium" }]}>
+              <Text
+                style={[
+                  styles.walletName,
+                  { color: colors.foreground, fontFamily: "Inter_500Medium" },
+                ]}
+              >
                 {w.name}
               </Text>
-              <Text style={[styles.walletBal, { color: w.balance < 0 ? colors.negative : colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
+              <Text
+                style={[
+                  styles.walletBal,
+                  {
+                    color: w.balance < 0 ? colors.negative : colors.foreground,
+                    fontFamily: "Inter_600SemiBold",
+                  },
+                ]}
+              >
                 {formatCLP(w.balance)}
               </Text>
             </View>
@@ -166,9 +364,19 @@ export default function SummaryScreen() {
         </View>
 
         {topCategory && (
-          <View style={[styles.insightCard, { backgroundColor: colors.accent, borderColor: colors.primary + "30" }]}>
+          <View
+            style={[
+              styles.insightCard,
+              { backgroundColor: colors.accent, borderColor: colors.primary + "30" },
+            ]}
+          >
             <Feather name="zap" size={16} color={colors.primary} />
-            <Text style={[styles.insightText, { color: colors.foreground, fontFamily: "Inter_400Regular" }]}>
+            <Text
+              style={[
+                styles.insightText,
+                { color: colors.foreground, fontFamily: "Inter_400Regular" },
+              ]}
+            >
               Tu mayor gasto este mes fue en{" "}
               <Text style={{ fontFamily: "Inter_600SemiBold" }}>{topCategory[0]}</Text> con{" "}
               <Text style={{ fontFamily: "Inter_600SemiBold" }}>{formatCLP(topCategory[1])}</Text>.
@@ -185,12 +393,25 @@ export default function SummaryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingBottom: 12, borderBottomWidth: 1, gap: 2 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    gap: 2,
+  },
   headerTitle: { fontSize: 18 },
   headerSub: { fontSize: 13 },
   content: { paddingHorizontal: 16, paddingTop: 16, gap: 14 },
   card: { borderRadius: 14, borderWidth: 1, padding: 16, gap: 10 },
-  cardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   cardTitle: { fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5 },
   cardHint: { fontSize: 13, lineHeight: 18 },
   bigNumber: { fontSize: 32 },
@@ -200,6 +421,45 @@ const styles = StyleSheet.create({
   miniDot: { width: 6, height: 6, borderRadius: 3 },
   miniLabel: { fontSize: 13 },
   miniVal: { fontSize: 13 },
+  editBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  editBtnText: { fontSize: 12 },
+  alertBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  alertBadgeText: { fontSize: 11 },
+  emptyBudget: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderTopWidth: 1,
+    borderStyle: "dashed",
+  },
+  emptyBudgetText: { fontSize: 13 },
+  budgetRow: { gap: 5 },
+  budgetRowTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  budgetCat: { fontSize: 13 },
+  budgetPct: { fontSize: 12 },
+  budgetRowBottom: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  budgetSpent: { fontSize: 11 },
+  budgetLimit: { fontSize: 11 },
   catRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   catName: { width: 100, fontSize: 13 },
   catRight: { flex: 1, gap: 4 },
@@ -208,6 +468,13 @@ const styles = StyleSheet.create({
   walletDot: { width: 8, height: 8, borderRadius: 4 },
   walletName: { flex: 1, fontSize: 14 },
   walletBal: { fontSize: 14 },
-  insightCard: { borderRadius: 12, borderWidth: 1, padding: 14, flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  insightCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+  },
   insightText: { flex: 1, fontSize: 14, lineHeight: 20 },
 });

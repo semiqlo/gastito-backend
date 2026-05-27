@@ -32,6 +32,10 @@ function RootLayoutNav() {
         name="new-debt"
         options={{ presentation: "modal", headerShown: false }}
       />
+      <Stack.Screen
+        name="budget-modal"
+        options={{ presentation: "modal", headerShown: false }}
+      />
     </Stack>
   );
 }
