@@ -1,12 +1,10 @@
+import { GoogleGenAI } from "@google/genai";
 import { Router } from "express";
 import multer from "multer";
-import OpenAI, { toFile } from "openai";
 
 const router = Router();
 
-const openai = new OpenAI({
-  apiKey: process.env["OPENAI_API_KEY"],
-});
+const ai = new GoogleGenAI({ apiKey: process.env["GEMINI_API_KEY"] });
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -44,9 +42,11 @@ Categorías válidas: Comida, Transporte, Entretenimiento, Compras, Salud, Educa
 
 IMPORTANTES:
 - Solo detecta transacciones cuando el usuario claramente reporta un gasto o ingreso
-- Para preguntas ("¿cuánto puedo gastar?") responde conversacionalmente sin bloque [TRANSACTION]
+- Para preguntas responde conversacionalmente sin bloque [TRANSACTION]
 - Mantén contexto financiero del usuario cuando te lo proporcionen
 - Las recomendaciones deben ser concretas y basadas en los datos del usuario`;
+
+type Role = "user" | "model";
 
 async function streamChatResponse(
   res: import("express").Response,
@@ -54,40 +54,42 @@ async function streamChatResponse(
   context?: string,
   history?: Array<{ role: "user" | "assistant"; content: string }>
 ) {
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
-  ];
+  const contents: Array<{ role: Role; parts: Array<{ text: string }> }> = [];
 
   if (context) {
-    messages.push({ role: "system", content: context });
+    contents.push({ role: "user", parts: [{ text: `[Contexto: ${context}]` }] });
+    contents.push({ role: "model", parts: [{ text: "Entendido, tengo el contexto financiero." }] });
   }
 
   if (history && Array.isArray(history)) {
     for (const h of history.slice(-12)) {
       if (h.role === "user" || h.role === "assistant") {
-        messages.push({ role: h.role, content: h.content });
+        contents.push({
+          role: h.role === "assistant" ? "model" : "user",
+          parts: [{ text: h.content }],
+        });
       }
     }
   }
 
-  messages.push({ role: "user", content: userMessage });
+  contents.push({ role: "user", parts: [{ text: userMessage }] });
 
-  const stream = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages,
-    max_tokens: 512,
-    stream: true,
+  const stream = await ai.models.generateContentStream({
+    model: "gemini-2.5-flash",
+    contents,
+    config: {
+      systemInstruction: SYSTEM_PROMPT,
+      maxOutputTokens: 8192,
+    },
   });
 
   for await (const chunk of stream) {
-    const content = chunk.choices[0]?.delta?.content;
-    if (content) {
-      res.write(`data: ${JSON.stringify({ content })}\n\n`);
-    }
-    if (chunk.choices[0]?.finish_reason === "stop") {
-      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    const text = chunk.text;
+    if (text) {
+      res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
     }
   }
+  res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
 }
 
 router.post("/chat", async (req, res): Promise<void> => {
@@ -135,34 +137,34 @@ router.post("/voice", upload.single("audio"), async (req, res): Promise<void> =>
   res.setHeader("X-Accel-Buffering", "no");
 
   try {
-    const ext = file.mimetype.includes("mp4") || file.mimetype.includes("m4a")
-      ? "m4a"
-      : file.mimetype.includes("webm")
-      ? "webm"
-      : file.mimetype.includes("ogg")
-      ? "ogg"
-      : "wav";
+    const audioBase64 = file.buffer.toString("base64");
+    const mimeType = file.mimetype || "audio/m4a";
 
-    const audioFile = await toFile(file.buffer, `audio.${ext}`, {
-      type: file.mimetype,
+    const transcriptionResponse = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          parts: [
+            {
+              text: "Transcribe este audio exactamente como fue hablado en español chileno. Devuelve solo el texto transcrito, sin explicaciones ni comentarios adicionales.",
+            },
+            {
+              inlineData: { mimeType, data: audioBase64 },
+            },
+          ],
+        },
+      ],
     });
 
-    const transcription = await openai.audio.transcriptions.create({
-      file: audioFile,
-      model: "gpt-4o-mini-transcribe" as any,
-      language: "es",
-      response_format: "json",
-    } as any);
+    const transcript = transcriptionResponse.text?.trim() ?? "";
 
-    const transcript = (transcription as any).text as string;
-
-    if (!transcript || !transcript.trim()) {
+    if (!transcript) {
       res.write(`data: ${JSON.stringify({ error: "No se pudo transcribir el audio." })}\n\n`);
       res.end();
       return;
     }
 
-    res.write(`data: ${JSON.stringify({ transcript: transcript.trim() })}\n\n`);
+    res.write(`data: ${JSON.stringify({ transcript })}\n\n`);
 
     let history: Array<{ role: "user" | "assistant"; content: string }> = [];
     if (historyRaw) {
@@ -171,7 +173,7 @@ router.post("/voice", upload.single("audio"), async (req, res): Promise<void> =>
       } catch {}
     }
 
-    await streamChatResponse(res, transcript.trim(), context, history);
+    await streamChatResponse(res, transcript, context, history);
     res.end();
   } catch (err: unknown) {
     req.log.error({ err }, "Gastito voice error");

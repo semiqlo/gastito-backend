@@ -14,7 +14,7 @@ A conversational Chilean AI financial assistant that helps users manage spending
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5 + OpenAI SDK (gpt-4o-mini)
+- API: Express 5 + Google Gemini SDK (gemini-2.5-flash)
 - Mobile: Expo (React Native) with expo-router
 - DB: AsyncStorage (mobile-local, no server DB in MVP)
 - Build: esbuild (CJS bundle for server)
