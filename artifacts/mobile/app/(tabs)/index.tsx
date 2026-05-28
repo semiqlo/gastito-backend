@@ -1,5 +1,6 @@
-import { ArrowUp, Mic } from "lucide-react-native";
+import { ArrowUp, Mic, Settings } from "lucide-react-native";
 import { AudioModule, RecordingPresets, useAudioRecorder } from "expo-audio";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { fetch } from "expo/fetch";
 import { File } from "expo-file-system";
@@ -20,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 import { useGastito, type ChatMessage, type Transaction } from "@/context/GastitoContext";
+import { useSettings } from "@/context/SettingsContext";
 
 function formatCLP(amount: number): string {
   return `$${amount.toLocaleString("es-CL")}`;
@@ -200,6 +202,8 @@ function RecordingIndicator() {
 export default function ChatScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { apiKey, botName, userName } = useSettings();
   const {
     messages,
     addMessage,
@@ -221,10 +225,11 @@ export default function ChatScreen() {
   const buildContext = useCallback(() => {
     const balance = `$${totalBalance.toLocaleString("es-CL")}`;
     const expenses = `$${monthlyExpenses.toLocaleString("es-CL")}`;
-    return `Contexto del usuario: Balance total: ${balance}, Gastos este mes: ${expenses}, Cuentas: ${wallets
+    const userPart = userName ? `El usuario se llama ${userName}. ` : "";
+    return `${userPart}Contexto del usuario: Balance total: ${balance}, Gastos este mes: ${expenses}, Cuentas: ${wallets
       .map((w) => `${w.name} (${w.type}): $${w.balance.toLocaleString("es-CL")}`)
       .join(", ")}`;
-  }, [totalBalance, monthlyExpenses, wallets]);
+  }, [totalBalance, monthlyExpenses, wallets, userName]);
 
   const streamResponse = useCallback(
     async (userText: string, botId: string, extraHistory?: Array<{ role: "user" | "assistant"; content: string }>) => {
@@ -233,9 +238,12 @@ export default function ChatScreen() {
 
       const history = extraHistory ?? messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
 
+      const chatHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      if (apiKey) chatHeaders["x-gemini-key"] = apiKey;
+
       const response = await fetch(`${baseUrl}/api/gastito/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: chatHeaders,
         body: JSON.stringify({
           message: userText,
           context: buildContext(),
@@ -277,7 +285,7 @@ export default function ChatScreen() {
         }
       }
     },
-    [messages, buildContext, updateMessage]
+    [messages, buildContext, updateMessage, apiKey]
   );
 
   const handleSend = useCallback(async () => {
@@ -366,8 +374,12 @@ export default function ChatScreen() {
       const botMsg = addMessage({ role: "assistant", content: "" });
       const botId = botMsg.id;
 
+      const voiceHeaders: Record<string, string> = {};
+      if (apiKey) voiceHeaders["x-gemini-key"] = apiKey;
+
       const response = await fetch(`${baseUrl}/api/gastito/voice`, {
         method: "POST",
+        headers: voiceHeaders,
         body: formData,
       });
 
@@ -423,7 +435,7 @@ export default function ChatScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [isRecording, recorder, messages, buildContext, addMessage, updateMessage]);
+  }, [isRecording, recorder, messages, buildContext, addMessage, updateMessage, apiKey]);
 
   const handleConfirmTransaction = useCallback(
     (msgId: string, tx: Partial<Transaction>) => {
@@ -508,8 +520,15 @@ export default function ChatScreen() {
         <Text
           style={[styles.headerTitle, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}
         >
-          Gastito
+          {botName || "Gastito"}
         </Text>
+        <Pressable
+          onPress={() => router.push("/settings-modal")}
+          hitSlop={10}
+          style={styles.headerGear}
+        >
+          <Settings size={20} color={colors.mutedForeground} />
+        </Pressable>
       </View>
 
       <KeyboardAvoidingView style={styles.flex} behavior="padding" keyboardVerticalOffset={0}>
@@ -645,7 +664,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerDot: { width: 8, height: 8, borderRadius: 4 },
-  headerTitle: { fontSize: 18 },
+  headerTitle: { fontSize: 18, flex: 1 },
+  headerGear: { padding: 2 },
   listContent: { paddingHorizontal: 16, paddingTop: 16, gap: 12 },
   bubbleRow: { flexDirection: "row", gap: 8, alignItems: "flex-end" },
   bubbleRowUser: { justifyContent: "flex-end" },

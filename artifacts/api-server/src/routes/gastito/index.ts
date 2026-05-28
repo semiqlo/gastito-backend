@@ -4,7 +4,15 @@ import multer from "multer";
 
 const router = Router();
 
-const ai = new GoogleGenAI({ apiKey: process.env["GEMINI_API_KEY"] });
+const SERVER_AI = new GoogleGenAI({ apiKey: process.env["GEMINI_API_KEY"] });
+
+function getAI(req: import("express").Request): GoogleGenAI {
+  const userKey = req.headers["x-gemini-key"];
+  if (typeof userKey === "string" && userKey.trim()) {
+    return new GoogleGenAI({ apiKey: userKey.trim() });
+  }
+  return SERVER_AI;
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -49,11 +57,13 @@ IMPORTANTES:
 type Role = "user" | "model";
 
 async function streamChatResponse(
+  req: import("express").Request,
   res: import("express").Response,
   userMessage: string,
   context?: string,
   history?: Array<{ role: "user" | "assistant"; content: string }>
 ) {
+  const ai = getAI(req);
   const contents: Array<{ role: Role; parts: Array<{ text: string }> }> = [];
 
   if (context) {
@@ -110,7 +120,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   res.setHeader("X-Accel-Buffering", "no");
 
   try {
-    await streamChatResponse(res, message, context, history);
+    await streamChatResponse(req, res, message, context, history);
     res.end();
   } catch (err: unknown) {
     req.log.error({ err }, "Gastito chat error");
@@ -140,7 +150,7 @@ router.post("/voice", upload.single("audio"), async (req, res): Promise<void> =>
     const audioBase64 = file.buffer.toString("base64");
     const mimeType = file.mimetype || "audio/m4a";
 
-    const transcriptionResponse = await ai.models.generateContent({
+    const transcriptionResponse = await getAI(req).models.generateContent({
       model: "gemini-2.5-flash",
       contents: [
         {
@@ -173,7 +183,7 @@ router.post("/voice", upload.single("audio"), async (req, res): Promise<void> =>
       } catch {}
     }
 
-    await streamChatResponse(res, transcript, context, history);
+    await streamChatResponse(req, res, transcript, context, history);
     res.end();
   } catch (err: unknown) {
     req.log.error({ err }, "Gastito voice error");

@@ -15,6 +15,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GastitoProvider } from "@/context/GastitoContext";
+import { SettingsProvider } from "@/context/SettingsContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -34,6 +35,10 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="budget-modal"
+        options={{ presentation: "modal", headerShown: false }}
+      />
+      <Stack.Screen
+        name="settings-modal"
         options={{ presentation: "modal", headerShown: false }}
       />
     </Stack>
@@ -59,15 +64,17 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <GastitoProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <KeyboardProvider>
-                <RootLayoutNav />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </GastitoProvider>
-        </QueryClientProvider>
+        <SettingsProvider>
+          <QueryClientProvider client={queryClient}>
+            <GastitoProvider>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <KeyboardProvider>
+                  <RootLayoutNav />
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </GastitoProvider>
+          </QueryClientProvider>
+        </SettingsProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );
