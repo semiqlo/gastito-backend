@@ -1,8 +1,8 @@
-import { Feather } from "@expo/vector-icons";
+import { PlusCircle, Sliders, Trash2, Zap } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useGastito } from "@/context/GastitoContext";
@@ -47,6 +47,7 @@ export default function SummaryScreen() {
     monthlyIncome,
     debts,
     budgetStatus,
+    clearAll,
   } = useGastito();
 
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
@@ -87,6 +88,25 @@ export default function SummaryScreen() {
 
   const overBudgetCount = budgetStatus.filter((b) => b.status === "over").length;
   const warningCount = budgetStatus.filter((b) => b.status === "warning").length;
+
+  const handleClearAll = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    Alert.alert(
+      "Limpiar todos los datos",
+      "Esto borrara todos tus gastos, cuentas, deudas y presupuestos. No se puede deshacer.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Limpiar todo",
+          style: "destructive",
+          onPress: async () => {
+            await clearAll();
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -211,7 +231,7 @@ export default function SummaryScreen() {
               }}
               style={[styles.editBtn, { backgroundColor: colors.muted }]}
             >
-              <Feather name="sliders" size={13} color={colors.primary} />
+              <Sliders size={13} color={colors.primary} />
               <Text
                 style={[
                   styles.editBtnText,
@@ -228,7 +248,7 @@ export default function SummaryScreen() {
               onPress={() => router.push("/budget-modal" as any)}
               style={[styles.emptyBudget, { borderColor: colors.border }]}
             >
-              <Feather name="plus-circle" size={16} color={colors.mutedForeground} />
+              <PlusCircle size={16} color={colors.mutedForeground} />
               <Text style={[styles.emptyBudgetText, { color: colors.mutedForeground }]}>
                 Toca para definir tus limites mensuales
               </Text>
@@ -370,7 +390,7 @@ export default function SummaryScreen() {
               { backgroundColor: colors.accent, borderColor: colors.primary + "30" },
             ]}
           >
-            <Feather name="zap" size={16} color={colors.primary} />
+            <Zap size={16} color={colors.primary} />
             <Text
               style={[
                 styles.insightText,
@@ -386,6 +406,16 @@ export default function SummaryScreen() {
             </Text>
           </View>
         )}
+
+        <Pressable
+          onPress={handleClearAll}
+          style={[styles.clearBtn, { borderColor: colors.negative + "40", backgroundColor: colors.negative + "10" }]}
+        >
+          <Trash2 size={15} color={colors.negative} />
+          <Text style={[styles.clearBtnText, { color: colors.negative, fontFamily: "Inter_500Medium" }]}>
+            Limpiar todos los datos
+          </Text>
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -477,4 +507,15 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   insightText: { flex: 1, fontSize: 14, lineHeight: 20 },
+  clearBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  clearBtnText: { fontSize: 14 },
 });

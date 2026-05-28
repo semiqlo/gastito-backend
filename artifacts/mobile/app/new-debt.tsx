@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { ArrowDownLeft, ArrowUpRight, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useState } from "react";
@@ -49,7 +49,7 @@ export default function NewDebtScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 8, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Feather name="x" size={22} color={colors.foreground} />
+          <X size={22} color={colors.foreground} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
           Registrar deuda
@@ -74,7 +74,7 @@ export default function NewDebtScreen() {
               },
             ]}
           >
-            <Feather name="arrow-down-left" size={18} color={direction === "owed_to_me" ? colors.positive : colors.mutedForeground} />
+            <ArrowDownLeft size={18} color={direction === "owed_to_me" ? colors.positive : colors.mutedForeground} />
             <Text style={[styles.dirBtnText, { color: direction === "owed_to_me" ? colors.positive : colors.mutedForeground, fontFamily: "Inter_600SemiBold" }]}>
               Me deben
             </Text>
@@ -89,7 +89,7 @@ export default function NewDebtScreen() {
               },
             ]}
           >
-            <Feather name="arrow-up-right" size={18} color={direction === "i_owe" ? colors.negative : colors.mutedForeground} />
+            <ArrowUpRight size={18} color={direction === "i_owe" ? colors.negative : colors.mutedForeground} />
             <Text style={[styles.dirBtnText, { color: direction === "i_owe" ? colors.negative : colors.mutedForeground, fontFamily: "Inter_600SemiBold" }]}>
               Yo debo
             </Text>

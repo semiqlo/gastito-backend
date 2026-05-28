@@ -1,4 +1,17 @@
-import { Feather } from "@expo/vector-icons";
+import {
+  Book,
+  Circle,
+  Coffee,
+  Film,
+  Heart,
+  Inbox,
+  Navigation,
+  ShoppingBag,
+  Trash2,
+  TrendingUp,
+  Users,
+  Wifi,
+} from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
@@ -30,17 +43,19 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString("es-CL", { day: "numeric", month: "short" });
 }
 
-const CATEGORY_ICONS: Record<string, string> = {
-  Comida: "coffee",
-  Transporte: "navigation",
-  Entretenimiento: "film",
-  Compras: "shopping-bag",
-  Salud: "heart",
-  Educacion: "book",
-  Servicios: "wifi",
-  Ingresos: "trending-up",
-  Deudas: "users",
-  Otro: "circle",
+type CategoryIcon = React.ComponentType<{ size: number; color: string }>;
+
+const CATEGORY_ICON_MAP: Record<string, CategoryIcon> = {
+  Comida: Coffee,
+  Transporte: Navigation,
+  Entretenimiento: Film,
+  Compras: ShoppingBag,
+  Salud: Heart,
+  Educacion: Book,
+  Servicios: Wifi,
+  Ingresos: TrendingUp,
+  Deudas: Users,
+  Otro: Circle,
 };
 
 const FILTERS = ["Todos", "Gastos", "Ingresos"] as const;
@@ -53,17 +68,13 @@ interface TxItemProps {
 
 function TransactionItem({ item, onDelete }: TxItemProps) {
   const colors = useColors();
-  const icon = CATEGORY_ICONS[item.category] ?? "circle";
+  const IconComp = CATEGORY_ICON_MAP[item.category] ?? Circle;
   const isIncome = item.type === "income";
 
   return (
     <View style={[styles.txItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={[styles.txIcon, { backgroundColor: isIncome ? colors.success + "20" : colors.accent }]}>
-        <Feather
-          name={icon as any}
-          size={18}
-          color={isIncome ? colors.positive : colors.primary}
-        />
+        <IconComp size={18} color={isIncome ? colors.positive : colors.primary} />
       </View>
       <View style={styles.txBody}>
         <Text
@@ -98,7 +109,7 @@ function TransactionItem({ item, onDelete }: TxItemProps) {
           }}
           hitSlop={8}
         >
-          <Feather name="trash-2" size={14} color={colors.mutedForeground} />
+          <Trash2 size={14} color={colors.mutedForeground} />
         </Pressable>
       </View>
     </View>
@@ -182,7 +193,7 @@ export default function TransactionsScreen() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Feather name="inbox" size={40} color={colors.mutedForeground} />
+            <Inbox size={40} color={colors.mutedForeground} />
             <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
               Sin movimientos.{"\n"}Cuéntale a Gastito en que gastaste.
             </Text>

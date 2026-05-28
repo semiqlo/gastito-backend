@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Check, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useState } from "react";
@@ -51,7 +51,7 @@ export default function NewWalletScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 8, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Feather name="x" size={22} color={colors.foreground} />
+          <X size={22} color={colors.foreground} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
           Nueva cuenta
@@ -112,7 +112,7 @@ export default function NewWalletScreen() {
               onPress={() => setSelectedColor(c)}
               style={[styles.colorDot, { backgroundColor: c }, selectedColor === c && styles.colorDotSelected]}
             >
-              {selectedColor === c && <Feather name="check" size={14} color="#fff" />}
+              {selectedColor === c && <Check size={14} color="#fff" />}
             </Pressable>
           ))}
         </View>

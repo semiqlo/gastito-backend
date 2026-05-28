@@ -1,4 +1,20 @@
-import { Feather } from "@expo/vector-icons";
+import {
+  Book,
+  Check,
+  Coffee,
+  Edit2,
+  Film,
+  Heart,
+  MoreHorizontal,
+  Navigation,
+  Plus,
+  ShoppingBag,
+  Tag,
+  Trash2,
+  Wifi,
+  X,
+  Zap,
+} from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -21,15 +37,17 @@ function formatCLP(amount: number): string {
   return `$${amount.toLocaleString("es-CL")}`;
 }
 
-const CATEGORY_ICONS: Record<string, string> = {
-  Comida: "coffee",
-  Transporte: "navigation",
-  Entretenimiento: "film",
-  Compras: "shopping-bag",
-  Salud: "heart",
-  Educacion: "book",
-  Servicios: "zap",
-  Otro: "more-horizontal",
+type IconComp = React.ComponentType<{ size: number; color: string }>;
+
+const CATEGORY_ICONS: Record<string, IconComp> = {
+  Comida: Coffee,
+  Transporte: Navigation,
+  Entretenimiento: Film,
+  Compras: ShoppingBag,
+  Salud: Heart,
+  Educacion: Book,
+  Servicios: Zap,
+  Otro: MoreHorizontal,
 };
 
 export default function BudgetModal() {
@@ -99,7 +117,7 @@ export default function BudgetModal() {
           Limite mensual por categoria
         </Text>
         <Pressable onPress={() => router.back()} style={styles.closeBtn}>
-          <Feather name="x" size={20} color={colors.mutedForeground} />
+          <X size={20} color={colors.mutedForeground} />
         </Pressable>
       </View>
 
@@ -125,7 +143,7 @@ export default function BudgetModal() {
             const budget = getBudget(category);
             const status = getStatus(category);
             const isEditing = editing === category;
-            const iconName = (CATEGORY_ICONS[category] ?? "tag") as any;
+            const IconComp = CATEGORY_ICONS[category] ?? Tag;
 
             return (
               <View
@@ -136,7 +154,7 @@ export default function BudgetModal() {
                 ]}
               >
                 <View style={[styles.iconBox, { backgroundColor: colors.muted }]}>
-                  <Feather name={iconName} size={16} color={colors.primary} />
+                  <IconComp size={16} color={colors.primary} />
                 </View>
 
                 <View style={styles.rowMiddle}>
@@ -212,7 +230,7 @@ export default function BudgetModal() {
                           style={[styles.actionBtn, { backgroundColor: colors.muted }]}
                           hitSlop={8}
                         >
-                          <Feather name="trash-2" size={14} color={colors.negative} />
+                          <Trash2 size={14} color={colors.negative} />
                         </Pressable>
                       )}
                       <Pressable
@@ -220,14 +238,14 @@ export default function BudgetModal() {
                         style={[styles.actionBtn, { backgroundColor: colors.muted }]}
                         hitSlop={8}
                       >
-                        <Feather name="x" size={14} color={colors.mutedForeground} />
+                        <X size={14} color={colors.mutedForeground} />
                       </Pressable>
                       <Pressable
                         onPress={() => handleSave(category)}
                         style={[styles.actionBtn, { backgroundColor: colors.primary }]}
                         hitSlop={8}
                       >
-                        <Feather name="check" size={14} color={colors.primaryForeground} />
+                        <Check size={14} color={colors.primaryForeground} />
                       </Pressable>
                     </>
                   ) : (
@@ -236,7 +254,11 @@ export default function BudgetModal() {
                       style={[styles.actionBtn, { backgroundColor: colors.muted }]}
                       hitSlop={8}
                     >
-                      <Feather name={budget ? "edit-2" : "plus"} size={14} color={colors.primary} />
+                      {budget ? (
+                        <Edit2 size={14} color={colors.primary} />
+                      ) : (
+                        <Plus size={14} color={colors.primary} />
+                      )}
                     </Pressable>
                   )}
                 </View>

@@ -1,4 +1,12 @@
-import { Feather } from "@expo/vector-icons";
+import {
+  Archive,
+  Circle,
+  CreditCard,
+  DollarSign,
+  Home,
+  Plus,
+  Smartphone,
+} from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React from "react";
@@ -27,12 +35,14 @@ const WALLET_TYPE_LABELS: Record<Wallet["type"], string> = {
   savings: "Ahorro",
 };
 
-const WALLET_TYPE_ICONS: Record<Wallet["type"], string> = {
-  bank: "home",
-  cash: "dollar-sign",
-  digital: "smartphone",
-  credit: "credit-card",
-  savings: "archive",
+type WalletIcon = React.ComponentType<{ size: number; color: string }>;
+
+const WALLET_TYPE_ICONS: Record<Wallet["type"], WalletIcon> = {
+  bank: Home,
+  cash: DollarSign,
+  digital: Smartphone,
+  credit: CreditCard,
+  savings: Archive,
 };
 
 interface WalletCardProps {
@@ -42,16 +52,13 @@ interface WalletCardProps {
 function WalletCard({ wallet }: WalletCardProps) {
   const colors = useColors();
   const isNegative = wallet.balance < 0;
+  const IconComp = WALLET_TYPE_ICONS[wallet.type] ?? Circle;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.cardTop}>
         <View style={[styles.cardIcon, { backgroundColor: wallet.color + "20" }]}>
-          <Feather
-            name={(WALLET_TYPE_ICONS[wallet.type] ?? "circle") as any}
-            size={20}
-            color={wallet.color}
-          />
+          <IconComp size={20} color={wallet.color} />
         </View>
         <View style={styles.cardInfo}>
           <Text style={[styles.cardName, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
@@ -101,7 +108,7 @@ export default function WalletsScreen() {
             }}
             style={[styles.addBtn, { backgroundColor: colors.primary }]}
           >
-            <Feather name="plus" size={18} color={colors.primaryForeground} />
+            <Plus size={18} color={colors.primaryForeground} />
           </Pressable>
         </View>
         <View style={[styles.totalBox, { backgroundColor: colors.accent }]}>
@@ -122,7 +129,7 @@ export default function WalletsScreen() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Feather name="credit-card" size={40} color={colors.mutedForeground} />
+            <CreditCard size={40} color={colors.mutedForeground} />
             <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
               Agrega tu primera cuenta
             </Text>

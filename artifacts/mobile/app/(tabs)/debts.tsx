@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Plus, Users } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useState } from "react";
@@ -107,7 +107,7 @@ export default function DebtsScreen() {
             }}
             style={[styles.addBtn, { backgroundColor: colors.primary }]}
           >
-            <Feather name="plus" size={18} color={colors.primaryForeground} />
+            <Plus size={18} color={colors.primaryForeground} />
           </Pressable>
         </View>
 
@@ -157,7 +157,7 @@ export default function DebtsScreen() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Feather name="users" size={40} color={colors.mutedForeground} />
+            <Users size={40} color={colors.mutedForeground} />
             <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
               {tab === "Activas" ? "Sin deudas activas.\nBuen historial." : "Sin deudas resueltas aun."}
             </Text>

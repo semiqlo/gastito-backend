@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { ArrowUp, Mic } from "lucide-react-native";
 import { AudioModule, RecordingPresets, useAudioRecorder } from "expo-audio";
 import * as Haptics from "expo-haptics";
 import { fetch } from "expo/fetch";
@@ -92,7 +92,7 @@ function MessageBubble({ message, onConfirmTransaction, onRejectTransaction }: B
       <View style={[styles.bubbleContent, isUser && styles.bubbleContentUser]}>
         {message.isVoice && isUser && (
           <View style={styles.voiceBadge}>
-            <Feather name="mic" size={10} color={colors.primaryForeground} />
+            <Mic size={10} color={colors.primaryForeground} />
           </View>
         )}
         <View
@@ -132,8 +132,6 @@ function MessageBubble({ message, onConfirmTransaction, onRejectTransaction }: B
     </View>
   );
 }
-
-const SYSTEM_CONTEXT_NOTE = `Responde en chileno coloquial conciso. Detecta transacciones con el bloque [TRANSACTION]...[/TRANSACTION] si el mensaje describe un gasto o ingreso.`;
 
 function parseTransactionFromResponse(text: string): {
   cleanText: string;
@@ -576,8 +574,7 @@ export default function ChatScreen() {
                   },
                 ]}
               >
-                <Feather
-                  name="mic"
+                <Mic
                   size={19}
                   color={
                     micPermission === "denied"
@@ -620,8 +617,7 @@ export default function ChatScreen() {
                 },
               ]}
             >
-              <Feather
-                name="arrow-up"
+              <ArrowUp
                 size={20}
                 color={
                   input.trim() && !isLoading

@@ -88,6 +88,7 @@ interface GastitoContextValue {
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
   setBudget: (category: string, limit: number) => void;
   deleteBudget: (category: string) => void;
+  clearAll: () => Promise<void>;
   totalBalance: number;
   monthlyExpenses: number;
   monthlyIncome: number;
@@ -102,41 +103,24 @@ function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
 }
 
+const WELCOME_MESSAGE: ChatMessage = {
+  id: "welcome",
+  role: "assistant",
+  content: "Hola. Soy Gastito, tu asistente financiero.\n\nCuéntame en qué gastaste, cuánto tienes, o qué quieres saber sobre tu plata. Sin formularios.",
+  timestamp: new Date().toISOString(),
+};
+
 const DEFAULT_WALLETS: Wallet[] = [
-  { id: "w1", name: "Cuenta Banco", type: "bank", balance: 250000, currency: "CLP", color: "#1A56DB" },
-  { id: "w2", name: "Efectivo", type: "cash", balance: 15000, currency: "CLP", color: "#16A34A" },
-];
-
-const DEFAULT_TRANSACTIONS: Transaction[] = [
-  { id: "t1", amount: 8000, description: "Sushi Osho", category: "Comida", walletId: "w1", date: new Date(Date.now() - 86400000).toISOString(), type: "expense", merchant: "Sushi Osho", confirmed: true },
-  { id: "t2", amount: 12000, description: "Uber al trabajo", category: "Transporte", walletId: "w1", date: new Date(Date.now() - 172800000).toISOString(), type: "expense", merchant: "Uber", confirmed: true },
-  { id: "t3", amount: 890000, description: "Sueldo Enero", category: "Ingresos", walletId: "w1", date: new Date(Date.now() - 259200000).toISOString(), type: "income", confirmed: true },
-  { id: "t4", amount: 3500, description: "Café", category: "Comida", walletId: "w2", date: new Date(Date.now() - 3600000).toISOString(), type: "expense", merchant: "Starbucks", confirmed: true },
-];
-
-const DEFAULT_DEBTS: Debt[] = [
-  { id: "d1", personName: "Sandra", amount: 5000, description: "Almuerzo del martes", direction: "owed_to_me", date: new Date(Date.now() - 86400000).toISOString(), settled: false },
-  { id: "d2", personName: "Matías", amount: 15000, description: "Taxi compartido", direction: "i_owe", date: new Date(Date.now() - 432000000).toISOString(), settled: false },
-];
-
-const DEFAULT_BUDGETS: Budget[] = [
-  { category: "Comida", limit: 80000 },
-  { category: "Transporte", limit: 40000 },
+  { id: "w1", name: "Cuenta Banco", type: "bank", balance: 0, currency: "CLP", color: "#1A56DB" },
+  { id: "w2", name: "Efectivo", type: "cash", balance: 0, currency: "CLP", color: "#16A34A" },
 ];
 
 export function GastitoProvider({ children }: { children: React.ReactNode }) {
   const [wallets, setWallets] = useState<Wallet[]>(DEFAULT_WALLETS);
-  const [transactions, setTransactions] = useState<Transaction[]>(DEFAULT_TRANSACTIONS);
-  const [debts, setDebts] = useState<Debt[]>(DEFAULT_DEBTS);
-  const [budgets, setBudgets] = useState<Budget[]>(DEFAULT_BUDGETS);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content: "Hola. Soy Gastito, tu asistente financiero.\n\nCuéntame en qué gastaste, cuánto tienes, o qué quieres saber sobre tu plata. Sin formularios.",
-      timestamp: new Date().toISOString(),
-    },
-  ]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -224,6 +208,16 @@ export function GastitoProvider({ children }: { children: React.ReactNode }) {
     setBudgets((prev) => prev.filter((b) => b.category !== category));
   }, []);
 
+  const clearAll = useCallback(async () => {
+    const freshWallets = DEFAULT_WALLETS.map((w) => ({ ...w, balance: 0 }));
+    setWallets(freshWallets);
+    setTransactions([]);
+    setDebts([]);
+    setBudgets([]);
+    setMessages([{ ...WELCOME_MESSAGE, timestamp: new Date().toISOString() }]);
+    await AsyncStorage.removeItem(STORAGE_KEY);
+  }, []);
+
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
@@ -254,7 +248,7 @@ export function GastitoProvider({ children }: { children: React.ReactNode }) {
         wallets, transactions, debts, messages, budgets,
         addWallet, updateWallet, addTransaction, deleteTransaction,
         addDebt, settleDebt, addMessage, updateMessage,
-        setBudget, deleteBudget,
+        setBudget, deleteBudget, clearAll,
         totalBalance, monthlyExpenses, monthlyIncome,
         budgetStatus,
       }}
