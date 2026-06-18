@@ -351,14 +351,11 @@ const baseUrl = process.env.EXPO_PUBLIC_API_URL;
       await recorder.stop();
       const uri = recorder.uri;
 
-      if (!uri) return;
+if (!uri) return;
 
-      setIsLoading(true);
+setIsLoading(true);
 
-      const baseUrl =
-  process.env.EXPO_PUBLIC_API_URL ??
-  "http://192.168.1.97:3000";
-
+const baseUrl = process.env.EXPO_PUBLIC_API_URL;
       const formData = new FormData();
 
       if (Platform.OS === "web") {
