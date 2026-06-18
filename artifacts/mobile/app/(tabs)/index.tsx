@@ -301,8 +301,12 @@ export default function ChatScreen() {
 
     try {
       await streamResponse(text, botMsg.id);
-    } catch {
-      updateMessage(botMsg.id, { content: "Hubo un problema al conectar. Intenta de nuevo." });
+    } catch (error) {
+      console.error("CHAT ERROR:", error);
+
+      updateMessage(botMsg.id, {
+        content: String(error)
+      });
     } finally {
       setIsLoading(false);
     }

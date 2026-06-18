@@ -16,7 +16,9 @@
     "ios": {
       "supportsTablet": false
     },
-    "android": {},
+    "android": {
+      "package": "com.semiqlo.mobile"
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
@@ -33,6 +35,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "a0dc2df9-ccdc-44bd-a56c-5d11d02ac5ea"
+      }
     }
   }
 }
