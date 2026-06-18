@@ -233,9 +233,7 @@ export default function ChatScreen() {
 
   const streamResponse = useCallback(
     async (userText: string, botId: string, extraHistory?: Array<{ role: "user" | "assistant"; content: string }>) => {
-      const baseUrl =
-  process.env.EXPO_PUBLIC_API_URL ??
-  "http://192.168.1.97:3000";
+const baseUrl = process.env.EXPO_PUBLIC_API_URL;
 
       const history = extraHistory ?? messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
 
