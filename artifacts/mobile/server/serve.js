@@ -67,18 +67,19 @@ function serveManifest(platform, res) {
 
 function serveLandingPage(req, res, landingPageTemplate, appName) {
   const forwardedProto = req.headers["x-forwarded-proto"];
-  const protocol = forwardedProto || "https";
-  const host = req.headers["x-forwarded-host"] || req.headers["host"];
-  const baseUrl = `${protocol}://${host}`;
-  const expsUrl = `${host}`;
+  const protocol = req.headers["x-forwarded-proto"] || "http";
+const host = req.headers["x-forwarded-host"] || req.headers["host"];
 
-  const html = landingPageTemplate
-    .replace(/BASE_URL_PLACEHOLDER/g, baseUrl)
-    .replace(/EXPS_URL_PLACEHOLDER/g, expsUrl)
-    .replace(/APP_NAME_PLACEHOLDER/g, appName);
+const baseUrl = `${protocol}://${host}`;
+const expsUrl = host;
 
-  res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-  res.end(html);
+const html = landingPageTemplate
+  .replace(/BASE_URL_PLACEHOLDER/g, baseUrl)
+  .replace(/EXPS_URL_PLACEHOLDER/g, expsUrl)
+  .replace(/APP_NAME_PLACEHOLDER/g, appName);
+
+res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+res.end(html);
 }
 
 function serveStaticFile(urlPath, res) {
