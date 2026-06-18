@@ -233,8 +233,9 @@ export default function ChatScreen() {
 
   const streamResponse = useCallback(
     async (userText: string, botId: string, extraHistory?: Array<{ role: "user" | "assistant"; content: string }>) => {
-      const domain = process.env.EXPO_PUBLIC_DOMAIN;
-      const baseUrl = domain ? `https://${domain}` : "";
+      const baseUrl =
+  process.env.EXPO_PUBLIC_API_URL ??
+  "http://192.168.1.97:3000";
 
       const history = extraHistory ?? messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
 
@@ -356,8 +357,9 @@ export default function ChatScreen() {
 
       setIsLoading(true);
 
-      const domain = process.env.EXPO_PUBLIC_DOMAIN;
-      const baseUrl = domain ? `https://${domain}` : "";
+      const baseUrl =
+  process.env.EXPO_PUBLIC_API_URL ??
+  "http://192.168.1.97:3000";
 
       const formData = new FormData();
 
