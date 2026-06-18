@@ -526,15 +526,25 @@ async function main() {
 
   setupSignalHandlers();
 
-  const domain = getDeploymentDomain();
-  const expoPublicReplId = getExpoPublicReplId();
-  const baseUrl = `https://${domain}`;
-  const timestamp = `${Date.now()}-${process.pid}`;
+  setupSignalHandlers();
 
-  prepareDirectories(timestamp);
-  clearMetroCache();
+const domain = getDeploymentDomain();
+const expoPublicReplId = getExpoPublicReplId();
 
-  await startMetro(domain, expoPublicReplId);
+// NO forzar https hardcodeado
+const protocol =
+  domain?.includes("localhost") || domain?.includes("127.0.0.1")
+    ? "http"
+    : "https";
+
+const baseUrl = `${protocol}://${domain}`;
+
+const timestamp = `${Date.now()}-${process.pid}`;
+
+prepareDirectories(timestamp);
+clearMetroCache();
+
+await startMetro(domain, expoPublicReplId);
 
   const downloadTimeout = 600000;
   const downloadPromise = downloadBundlesAndManifests(timestamp);
